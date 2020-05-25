@@ -1,0 +1,4 @@
+data:
+    crossval_ids: data/fmnist/crossval_ids.pkl
+    dataset_path: data/fmnist
+    preprocessed: data/fmnist/preprocessed.h5
