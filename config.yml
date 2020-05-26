@@ -1,4 +1,11 @@
 data:
     crossval_ids: data/fmnist/crossval_ids.pkl
+    n_fold: 5
     dataset_path: data/fmnist
     preprocessed: data/fmnist/preprocessed.h5
+    log_path: log
+search:
+    batchsize: 100
+train:
+    batchsize: 100
+

@@ -19,3 +19,11 @@ def load_fmnist(path, is_train=True):
                                offset=16).reshape(len(labels), 784)
     return images, labels
 
+def calc_param_size(model):
+    '''
+    Show the memory cost of model.parameters, in MB. 
+    '''
+    return np.sum(np.prod(v.size()) for v in model.parameters())*4e-6
+
+def print_red(something):
+    print("\033[1;31m{}\033[0m".format(something))

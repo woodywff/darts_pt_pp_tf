@@ -73,7 +73,7 @@ def preprocess(config_yml='config.yml', overwrite=False):
     
     # split for cross validation
     crossval_ids = config['data']['crossval_ids']
-    crossval_split(len(train_x), crossval_ids, overwrite=overwrite)
+    crossval_split(len(train_x), crossval_ids, n_fold=config['data']['n_fold'], overwrite=overwrite)
     
     return
 
