@@ -23,11 +23,14 @@ DEBUG_FLAG = False
 class Base:
     '''
     Base class for Searching and Training
-    for_final_training: if False, for k-fold-cross-val, otherwise final training will use the whole training dataset.
     cf: config.yml path
+    cv_id: which fold in the cross validation.
+    for_train: if True, for training process, otherwise for searching.
     '''
-    def __init__(self, for_final_training=False, cf='config.yml'):
-        self.for_final_training = for_final_training
+    def __init__(self, cf='config.yml', cv_id=0, for_train=False):
+        self.cf = cf
+        self.cv_id = cv_id
+        self.for_train = for_train
         self._init_config()
         self._init_log()
         self._init_device()
@@ -56,7 +59,7 @@ class Base:
         return
     
     def _init_dataset(self):
-        dataset = generator.Dataset(for_search=self.for_search, for_final_training=self.for_final_training)
+        dataset = pipline.Dataset(cf=self.cf, cv_id=self.cv_id, for_train=self.for_train)
         self.train_generator = dataset.train_generator
         self.val_generator = dataset.val_generator
         return
@@ -67,8 +70,8 @@ class Searching(Base):
     jupyter: if True, run in Jupyter Notebook, otherwise in shell.
     new_lr: if True, check_resume() will not load the saved states of optimizers and lr_schedulers.
     '''
-    def __init__(self, jupyter=True, new_lr=False):
-        super().__init__(jupyter=jupyter)
+    def __init__(self, cf='config.yml', cv_id=0, new_lr=False):
+        super().__init__(cf=cf, cv_id=cv_id)
         self._init_model()
         self.check_resume(new_lr=new_lr)
     
@@ -81,9 +84,9 @@ class Searching(Base):
                               normal_w_share=self.config['search']['normal_w_share'], 
                               channel_change=self.config['search']['channel_change']).to(self.device)
         print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
-        self.loss = WeightedDiceLoss().to(self.device)
+        self.loss = nn.CrossEntropyLoss().to(self.device)
 
-        self.optim_shell = Adam(self.model.alphas()) # lr=3e-4
+        self.optim_shell = Adam(self.model.alphas()) 
         self.optim_kernel = Adam(self.model.kernel.parameters())
         self.shell_scheduler = ReduceLROnPlateau(self.optim_shell,verbose=True,factor=0.5)
         self.kernel_scheduler = ReduceLROnPlateau(self.optim_kernel,verbose=True,factor=0.5)
@@ -107,7 +110,7 @@ class Searching(Base):
             self.epoch = 0
             self.geno_count = Counter()
             self.history = defaultdict(list)
-            self.best_val_loss = 1.0
+            self.best_val_loss = float('inf')
 
     def search(self):
         '''

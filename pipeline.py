@@ -4,7 +4,9 @@ from random import shuffle
 import pdb
 import yaml
 import pickle
-
+'''
+The pipeline provides ndarray rather than framework-specific formats.
+'''
 class Generator():
     '''
     ids: id list
@@ -42,34 +44,34 @@ class Generator():
         return np.asarray(x), np.asarray(y)
         
 class Dataset():
-    def __init__(self, cf='config.yml', crossval=0, for_train=True):
+    def __init__(self, cf='config.yml', cv_id=0, for_train=True):
         '''
         cf: config.yml path
-        crossval: which fold in the cross validation.
-        if crossval >= n_fold: use all the training dataset.
+        cv_id: which fold in the cross validation.
+        if cv_id >= n_fold: use all the training dataset.
         for_train: if True, for training process, otherwise for searching.
         '''
         with open(cf) as f:
             self.config = yaml.load(f,Loader=yaml.FullLoader)
-        with open(self.config['data']['crossval_ids'],'rb') as f:
-            self.crossval_ids = pickle.load(f)
-        self.crossval = crossval
+        with open(self.config['data']['cv_file'],'rb') as f:
+            self.cv_dict = pickle.load(f)
+        self.cv_id = cv_id
         self.n_fold = self.config['data']['n_fold']
         self.for_train = for_train
     
     @property
     def _train_ids(self):
-        if self.crossval >= self.n_fold:
-            return self.crossval_ids['train_0'] + self.crossval_ids['val_0'] 
+        if self.cv_id >= self.n_fold:
+            return self.cv_dict['train_0'] + self.cv_dict['val_0'] 
         else:
-            return self.crossval_ids['train_{}'.format(self.crossval)]
+            return self.cv_dict['train_{}'.format(self.cv_id)]
         
     @property
     def _val_ids(self):
-        if self.crossval >= self.n_fold:
-            return self.crossval_ids['train_0'] + self.crossval_ids['val_0'] 
+        if self.cv_id >= self.n_fold:
+            return self.cv_dict['train_0'] + self.cv_dict['val_0'] 
         else:
-            return self.crossval_ids['val_{}'.format(self.crossval)]
+            return self.cv_dict['val_{}'.format(self.cv_id)]
         
     @property
     def train_generator(self):

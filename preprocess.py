@@ -7,7 +7,7 @@ import os
 import pdb
 import h5py
 
-def crossval_split(n_ids, saved_path, n_fold=5, overwrite=False):
+def cv_split(n_ids, saved_path, n_fold=5, overwrite=False):
     '''
     To generate k-fold-cross-validation indices.
     {'train_0':[],'val_0':[],'train_1':[],'val_1':[],...} is saved as .pkl 
@@ -72,8 +72,11 @@ def preprocess(config_yml='config.yml', overwrite=False):
         g.create_dataset('y', data = y_test)
     
     # split for cross validation
-    crossval_ids = config['data']['crossval_ids']
-    crossval_split(len(train_x), crossval_ids, n_fold=config['data']['n_fold'], overwrite=overwrite)
+    cv_file = config['data']['cv_file']
+    cv_split(n_ids=len(train_x), 
+             saved_path=cv_file, 
+             n_fold=config['data']['n_fold'], 
+             overwrite=overwrite)
     
     return
 
