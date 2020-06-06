@@ -35,9 +35,10 @@ class Generator():
         return
     
     def append(self, x, y, i):
+        '''Dataset specific. This is for fashion-mnist'''
         with h5py.File(self.h5f, 'r') as f:
-            x.append(f['train']['x'][i])
-            y.append(f['train']['y'][i])
+            x.append(f['train']['x'][i][np.newaxis])
+            y.append(f['train']['y'][i][np.newaxis])
         return
     
     def feed(self, x, y):

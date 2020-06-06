@@ -24,12 +24,12 @@ class Base:
     '''
     Base class for Searching and Training
     cf: config.yml path
-    cv_id: which fold in the cross validation.
+    cv_i: which fold in the cross validation.
     for_train: if True, for training process, otherwise for searching.
     '''
-    def __init__(self, cf='config.yml', cv_id=0, for_train=False):
+    def __init__(self, cf='config.yml', cv_i=0, for_train=False):
         self.cf = cf
-        self.cv_id = cv_id
+        self.cv_i = cv_i
         self.for_train = for_train
         self._init_config()
         self._init_log()
@@ -59,7 +59,7 @@ class Base:
         return
     
     def _init_dataset(self):
-        dataset = pipline.Dataset(cf=self.cf, cv_id=self.cv_id, for_train=self.for_train)
+        dataset = pipline.Dataset(cf=self.cf, cv_i=self.cv_i, for_train=self.for_train)
         self.train_generator = dataset.train_generator
         self.val_generator = dataset.val_generator
         return
@@ -70,8 +70,8 @@ class Searching(Base):
     jupyter: if True, run in Jupyter Notebook, otherwise in shell.
     new_lr: if True, check_resume() will not load the saved states of optimizers and lr_schedulers.
     '''
-    def __init__(self, cf='config.yml', cv_id=0, new_lr=False):
-        super().__init__(cf=cf, cv_id=cv_id)
+    def __init__(self, cf='config.yml', cv_i=0, new_lr=False):
+        super().__init__(cf=cf, cv_i=cv_i)
         self._init_model()
         self.check_resume(new_lr=new_lr)
     
