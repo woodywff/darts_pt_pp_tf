@@ -26,3 +26,5 @@ train:
   n_fold: 5
   drop_rate: 0.2
   epochs: 200
+test:
+  batchsize: 50
