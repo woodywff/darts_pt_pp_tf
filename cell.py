@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from ops import OPS, PRIMITIVES
+from ops import OPS, PRIMITIVES, FactorizedReduce, ReLUConvBN
 import pdb
 
 
@@ -34,6 +34,8 @@ class Cell(nn.Module):
         reduction_prev: if True, the former layer is a reduction layer.
         '''
         super().__init__()
+        self.reduction = reduction
+        
         if reduction_prev:
             self.preprocess0 = FactorizedReduce(c0, node_c, affine=False)
         else:

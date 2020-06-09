@@ -1,15 +1,28 @@
 data:
-    cv_file: data/fmnist/crossval_ids.pkl
-    n_fold: 5
-    dataset_path: data/fmnist
-    preprocessed: data/fmnist/preprocessed.h5
-    log_path: log
+  dataset_path: data/fmnist
+  in_channels: 1
+  len_test: 10000
+  len_train: 60000
+  log_path: log
+  out_channels: 10
+  preprocessed: data/fmnist/preprocessed.h5
+  seed: 0
 search:
-    batchsize: 100
-    last_save: log/search_latest.pt
-    best_shot: log/search_bestshot.pt
+  batchsize: 50
+  best_geno_count: 40
+  cv_file: data/fmnist/cv_search.pkl
+  depth: 8
+  epochs: 200
+  geno_file: log/best_genotype.pkl
+  init_node_c: 16
+  last_save: log/search_latest.pt
+  n_fold: 2
+  n_nodes: 4
 train:
-    batchsize: 100
-    last_save: log/train_latest.pt
-    best_shot: log/train_bestshot.pt
-
+  batchsize: 50
+  best_shot: log/train_bestshot.pt
+  cv_file: data/fmnist/cv_train.pkl
+  last_save: log/train_latest.pt
+  n_fold: 5
+  drop_rate: 0.2
+  epochs: 200

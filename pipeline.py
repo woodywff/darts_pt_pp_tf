@@ -20,6 +20,10 @@ class Generator():
         # steps per epoch:
         self.spe = int(np.ceil(len(self.ids)/self.bs)) 
         
+    @property
+    def steps_per_epoch(self):
+        return self.spe
+        
     def epoch(self):
         x = []
         y = []
@@ -38,52 +42,54 @@ class Generator():
         '''Dataset specific. This is for fashion-mnist'''
         with h5py.File(self.h5f, 'r') as f:
             x.append(f['train']['x'][i][np.newaxis])
-            y.append(f['train']['y'][i][np.newaxis])
+            y.append(f['train']['y'][i])
         return
     
     def feed(self, x, y):
         return np.asarray(x), np.asarray(y)
         
 class Dataset():
-    def __init__(self, cf='config.yml', cv_id=0, for_train=True):
+    def __init__(self, cf='config.yml', cv_i=0, for_train=False):
         '''
         cf: config.yml path
-        cv_id: which fold in the cross validation.
-        if cv_id >= n_fold: use all the training dataset.
+        cv_i: which fold in the cross validation.
+        if cv_i >= n_fold: use all the training dataset.
         for_train: if True, for training process, otherwise for searching.
         '''
         with open(cf) as f:
             self.config = yaml.load(f,Loader=yaml.FullLoader)
-        with open(self.config['data']['cv_file'],'rb') as f:
+        self.search_or_train = 'train' if for_train else 'search'
+        cv_file = self.config[self.search_or_train]['cv_file']
+        self.n_fold = self.config[self.search_or_train]['n_fold']
+        with open(cv_file,'rb') as f:
             self.cv_dict = pickle.load(f)
-        self.cv_id = cv_id
-        self.n_fold = self.config['data']['n_fold']
-        self.for_train = for_train
+        self.cv_i = cv_i
+        
     
     @property
     def _train_ids(self):
-        if self.cv_id >= self.n_fold:
+        if self.cv_i >= self.n_fold:
             return self.cv_dict['train_0'] + self.cv_dict['val_0'] 
         else:
-            return self.cv_dict['train_{}'.format(self.cv_id)]
+            return self.cv_dict['train_{}'.format(self.cv_i)]
         
     @property
     def _val_ids(self):
-        if self.cv_id >= self.n_fold:
+        if self.cv_i >= self.n_fold:
             return self.cv_dict['train_0'] + self.cv_dict['val_0'] 
         else:
-            return self.cv_dict['val_{}'.format(self.cv_id)]
+            return self.cv_dict['val_{}'.format(self.cv_i)]
         
     @property
     def train_generator(self):
         return Generator(ids = self._train_ids, 
                          h5f = self.config['data']['preprocessed'], 
-                         bs = self.config['train' if self.for_train else 'search']['batchsize'])
+                         bs = self.config[self.search_or_train]['batchsize'])
     @property
     def val_generator(self):
         return Generator(ids = self._val_ids, 
                          h5f = self.config['data']['preprocessed'], 
-                         bs = self.config['train' if self.for_train else 'search']['batchsize'])
+                         bs = self.config[self.search_or_train]['batchsize'])
     
     
     

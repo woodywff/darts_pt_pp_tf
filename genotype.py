@@ -1,11 +1,12 @@
 from collections import namedtuple
 import numpy as np
 from ops import PRIMITIVES
+from torch.functional import F
 import pdb
 
 Genotype = namedtuple('Genotype', ['normal','reduce'])
 '''
-Genotype saves the searched downward cell and upward cell
+Genotype saves the searched normal cell and reduction cell.
 '''
 
 class GenoParser:
@@ -21,7 +22,7 @@ class GenoParser:
         Each MixedOp would keep the Op with the highest alpha value.
         For each node, two edges with the highest alpha values are kept as the inputs.
         '''
-        alphas = F.softmax(self.alphas, dim=-1).detach().cpu().numpy()
+        alphas = F.softmax(alphas, dim=-1).detach().cpu().numpy()
         i = 0
         res = []
         for n_edges in range(2, 2 + self.n_nodes):
