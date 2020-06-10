@@ -20,11 +20,11 @@ search:
   n_nodes: 4
 train:
   batchsize: 50
-  best_shot: log/train_bestshot.pt
+  best_shot: log/train_best.pt
   cv_file: data/fmnist/cv_train.pkl
   last_save: log/train_latest.pt
   n_fold: 5
   drop_rate: 0.2
   epochs: 200
 test:
-  batchsize: 50
+  batchsize: 200
