@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from ops import OPS, FactorizedReduce, ReLUConvBN
+from .ops import OPS, FactorizedReduce, ReLUConvBN
 import pdb
-# from genotype import Genotype
 
 FLAG_DEBUG = False
 

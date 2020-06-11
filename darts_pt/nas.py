@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
-from ops import PRIMITIVES
-from cell import Cell
+from .cell import Cell
 from torch.functional import F
 import pdb
-from genotype import Genotype, GenoParser
+from genotype import Genotype, GenoParser, PRIMITIVES
 
 FLAG_DEBUG = False
 
@@ -87,8 +86,8 @@ class ShellNet(nn.Module):
     
     def get_gene(self):
         geno_parser = GenoParser(self.n_nodes)
-        gene_normal = geno_parser.parse(self.alphas_normal)
-        gene_reduce = geno_parser.parse(self.alphas_reduce)
+        gene_normal = geno_parser.parse(F.softmax(self.alphas_normal, dim=-1).detach().cpu().numpy())
+        gene_reduce = geno_parser.parse(F.softmax(self.alphas_reduce, dim=-1).detach().cpu().numpy())
 
         return Genotype(normal=gene_normal, reduce=gene_reduce) 
     

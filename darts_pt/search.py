@@ -8,8 +8,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 import pipeline
-from helper import calc_param_size, print_red, accuracy
-from nas import ShellNet
+from helper import calc_param_size, print_red
+from .utils import accuracy
+from .nas import ShellNet
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 # from tqdm import tqdm
@@ -42,8 +43,9 @@ class Base:
         return
     
     def _init_log(self):
+        self.log_path = self.config['data']['log_path']['pt']
         try:
-            os.mkdir(self.config['data']['log_path'])
+            os.mkdir(self.log_path)
         except FileExistsError:
             pass
 
@@ -94,7 +96,7 @@ class Searching(Base):
         self.kernel_scheduler = ReduceLROnPlateau(self.optim_kernel,verbose=True,factor=0.5)
 
     def check_resume(self, new_lr=False):
-        self.last_save = self.config['search']['last_save']
+        self.last_save = os.path.join(self.log_path, self.config['search']['last_save'])
         if os.path.exists(self.last_save):
             state_dicts = torch.load(self.last_save, map_location=self.device)
             self.epoch = state_dicts['epoch'] + 1
@@ -117,7 +119,7 @@ class Searching(Base):
         (best_gene: str(Genotype), geno_count: int)
         '''
 #         pdb.set_trace()
-        geno_file = self.config['search']['geno_file']
+        geno_file = os.path.join(self.log_path, self.config['search']['geno_file'])
         if os.path.exists(geno_file):
             print('{} exists.'.format(geno_file))
             with open(geno_file, 'rb') as f:

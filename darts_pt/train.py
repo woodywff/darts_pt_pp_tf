@@ -2,8 +2,9 @@ import pdb
 import os
 import torch
 import torch.nn as nn
-from helper import calc_param_size, accuracy
-from searched import SearchedNet
+from helper import calc_param_size
+from .utils import accuracy
+from .searched import SearchedNet
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 # from tqdm import tqdm
@@ -12,7 +13,7 @@ from collections import defaultdict, OrderedDict
 import pickle
 from genotype import Genotype
 import shutil
-from search import Base
+from .search import Base
 
 DEBUG_FLAG = True
 
@@ -31,7 +32,7 @@ class Training(Base):
         self.check_resume(new_lr=new_lr)
     
     def _init_model(self):
-        geno_file = self.config['search']['geno_file']
+        geno_file = os.path.join(self.log_path, self.config['search']['geno_file'])
         with open(geno_file, 'rb') as f:
             gene = eval(pickle.load(f)[0])
         self.model = SearchedNet(gene=gene, 
@@ -49,8 +50,8 @@ class Training(Base):
         
 
     def check_resume(self, new_lr=False):
-        self.last_save = self.config['train']['last_save']
-        self.best_shot = self.config['train']['best_shot']
+        self.last_save = os.path.join(self.log_path, self.config['train']['last_save'])
+        self.best_shot = os.path.join(self.log_path, self.config['train']['best_shot'])
         if os.path.exists(self.last_save):
             state_dicts = torch.load(self.last_save, map_location=self.device)
             self.epoch = state_dicts['epoch'] + 1

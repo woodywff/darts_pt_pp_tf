@@ -2,14 +2,15 @@ import pdb
 import os
 import torch
 import torch.nn as nn
-from helper import calc_param_size, accuracy
-from searched import SearchedNet
+from helper import calc_param_size
+from .utils import accuracy
+from .searched import SearchedNet
 # from tqdm import tqdm
 from tqdm.notebook import tqdm
 from collections import OrderedDict
 import pickle
 from genotype import Genotype
-from search import Base
+from .search import Base
 import pipeline
 
 DEBUG_FLAG = False
@@ -29,7 +30,7 @@ class Prediction(Base):
         return
     
     def _init_model(self):
-        geno_file = self.config['search']['geno_file']
+        geno_file = os.path.join(self.log_path, self.config['search']['geno_file'])
         with open(geno_file, 'rb') as f:
             gene = eval(pickle.load(f)[0])
         self.model = SearchedNet(gene=gene, 
@@ -42,7 +43,8 @@ class Prediction(Base):
         print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
         self.loss = nn.CrossEntropyLoss().to(self.device)
 
-        state_dicts = torch.load(self.config['train']['best_shot'], map_location=self.device)
+        state_dicts = torch.load(os.path.join(self.log_path, self.config['train']['best_shot']), 
+                                 map_location=self.device)
         self.model.load_state_dict(state_dicts['model_param'])
         self.model.eval()
 

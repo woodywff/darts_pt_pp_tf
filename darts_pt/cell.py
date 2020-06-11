@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from ops import OPS, PRIMITIVES, FactorizedReduce, ReLUConvBN
+from .ops import OPS, FactorizedReduce, ReLUConvBN
+from genotype import PRIMITIVES
 import pdb
 
 
