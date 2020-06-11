@@ -7,7 +7,7 @@ Genotype saves the searched normal cell and reduction cell.
 '''
 Genotype = namedtuple('Genotype', ['normal','reduce'])
 
-
+# This is a subset of darts_xx.ops.OPS
 PRIMITIVES = ['max_pool_3x3',
               'avg_pool_3x3',
               'skip_connect',
