@@ -7,7 +7,6 @@ import sys
 import numpy as np
 import pipeline
 from helper import calc_param_size, print_red
-from .utils import accuracy
 from .nas import ShellNet
 # from tqdm import tqdm
 from tqdm.notebook import tqdm
@@ -15,7 +14,8 @@ from collections import defaultdict, Counter, OrderedDict
 import pickle
 from paddle.fluid import core
 import paddle.fluid as fluid
-from fluid.optimizer import Adam
+from paddle.fluid.optimizer import Adam
+from paddle.fluid.layers import accuracy
 
 
 DEBUG_FLAG = True
@@ -75,33 +75,30 @@ class Searching(Base):
     
     def _init_model(self):
         pdb.set_trace()
-#         self.model = ShellNet(in_channels=self.config['data']['in_channels'], 
-#                               init_node_c=self.config['search']['init_node_c'], 
-#                               out_channels=self.config['data']['out_channels'], 
-#                               depth=self.config['search']['depth'], 
-#                               n_nodes=self.config['search']['n_nodes']).to(self.device)
-        self.model = fluid.dygraph.nn.Conv2D(2,2,1)
+        self.model = ShellNet(in_channels=self.config['data']['in_channels'], 
+                              init_node_c=self.config['search']['init_node_c'], 
+                              out_channels=self.config['data']['out_channels'], 
+                              depth=self.config['search']['depth'], 
+                              n_nodes=self.config['search']['n_nodes'])
         print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
         self.loss = lambda props, y_truth: fluid.layers.reduce_mean(fluid.layers.softmax_with_cross_entropy(props, y_truth))
-
         self.optim_shell = Adam(parameter_list=self.model.alphas()) 
         self.optim_kernel = Adam(parameter_list=self.model.kernel.parameters())
-#         self.shell_scheduler = ReduceLROnPlateau(self.optim_shell,verbose=True,factor=0.5)
-#         self.kernel_scheduler = ReduceLROnPlateau(self.optim_kernel,verbose=True,factor=0.5)
 
     def check_resume(self, new_lr=False):
         self.last_save = os.path.join(self.log_path, self.config['search']['last_save'])
-        if os.path.exists(self.last_save):
-            state_dicts = torch.load(self.last_save, map_location=self.device)
+        self.last_aux = os.path.join(self.log_path, self.config['search']['last_aux'])
+        if os.path.exists(self.last_aux):
+            model_params,_ = fluid.dygraph.load_dygraph(self.last_save)
+            with open(self.last_aux, 'rb') as f:
+                state_dicts = pickle.load(f)
             self.epoch = state_dicts['epoch'] + 1
             self.geno_count = state_dicts['geno_count']
             self.history = state_dicts['history']
-            self.model.load_state_dict(state_dicts['model_param'])
+            self.model.set_dict(model_params)
             if not new_lr:
-                self.optim_shell.load_state_dict(state_dicts['optim_shell'])
-                self.optim_kernel.load_state_dict(state_dicts['optim_kernel'])
-                self.shell_scheduler.load_state_dict(state_dicts['shell_scheduler'])
-                self.kernel_scheduler.load_state_dict(state_dicts['kernel_scheduler'])
+                self.optim_shell._learning_rate = state_dicts['lr_shell']
+                self.optim_kernel._learning_rate = state_dicts['lr_kernel']
         else:
             self.epoch = 0
             self.geno_count = Counter()
@@ -122,6 +119,11 @@ class Searching(Base):
         best_gene = None
         best_geno_count = self.config['search']['best_geno_count']
         n_epochs = self.config['search']['epochs']
+        lr_count_shell = 0
+        lr_count_kernel = 0
+        lr_record_shell = float('inf')
+        lr_record_shell = float('inf')
+        lr_patience = self.config['search']['lr_patience']
         for epoch in range(n_epochs):
             gene = str(self.model.get_gene())
             self.geno_count[gene] += 1
@@ -131,6 +133,17 @@ class Searching(Base):
                 break
 
             shell_loss, kernel_loss, shell_acc, kernel_acc = self.train()
+            
+            if shell_loss >= lr_record_shell:
+                lr_count_shell += 1
+                if lr_count_shell == lr_patience:
+                    self.optim_shell._learning_rate *= 0.5
+                    lr_count_shell = 0
+                    lr_record_shell = shell_loss
+            else:
+                lr_count_shell = 0
+                lr_record_shell = shell_loss
+                
             self.shell_scheduler.step(shell_loss)
             self.kernel_scheduler.step(kernel_loss)
             self.history['shell_loss'].append(shell_loss)

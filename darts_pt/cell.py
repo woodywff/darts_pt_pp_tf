@@ -20,7 +20,7 @@ class MixedOp(nn.Module):
 
     def forward(self, x, alphas):
         '''
-        alphas: alpha_reduce or alpha_normal
+        alphas: one row of alpha_reduce or alpha_normal
         '''
         return sum(alpha * op(x) for alpha, op in zip(alphas, self._ops))
 
@@ -47,7 +47,6 @@ class Cell(nn.Module):
         self.node_c = node_c
         
         self._ops = nn.ModuleList()
-        self._bns = nn.ModuleList()
         for i in range(self.n_nodes):
             for j in range(2+i):
                 stride = 2 if reduction and j < 2 else 1

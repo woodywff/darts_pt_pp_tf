@@ -1,31 +1,35 @@
-import torch
-import torch.nn as nn
-from .ops import OPS, FactorizedReduce, ReLUConvBN
+from .ops import OPS, FactorizedReduce, ReLUConvBN, bn_param_config
 from genotype import PRIMITIVES
+import paddle.fluid as fluid
+from paddle.fluid.param_attr import ParamAttr
+from paddle.fluid.dygraph import Layer, LayerList, Sequential
+from paddle.fluid.dygraph.nn import BatchNorm
 import pdb
 
 
-class MixedOp(nn.Module):
+class MixedOp(Layer):
     def __init__(self, channels, stride):
         '''
         channels: in_channels == out_channels for MixedOp
         '''
         super().__init__()
-        self._ops = nn.ModuleList()
+        self._ops = LayerList()
         for prim_op in PRIMITIVES:
             op = OPS[prim_op](channels, stride, False)
             if 'pool' in prim_op:
-                op = nn.Sequential(op, nn.BatchNorm2d(channels, affine=False))
+                gama, beta = bn_param_config()
+                bn = BatchNorm(channels, param_attr=gama, bias_attr=beta)
+                op = Sequential(op, bn)
             self._ops.append(op)
 
     def forward(self, x, alphas):
         '''
-        alphas: alpha_reduce or alpha_normal
+        alphas: one row of alpha_reduce or alpha_normal
         '''
         return sum(alpha * op(x) for alpha, op in zip(alphas, self._ops))
 
 
-class Cell(nn.Module):
+class Cell(Layer):
     def __init__(self, n_nodes, c0, c1, node_c, reduction, reduction_prev):
         '''
         n_nodes: How many nodes in a cell.
@@ -46,8 +50,7 @@ class Cell(nn.Module):
         self.n_nodes = n_nodes
         self.node_c = node_c
         
-        self._ops = nn.ModuleList()
-        self._bns = nn.ModuleList()
+        self._ops = LayerList()
         for i in range(self.n_nodes):
             for j in range(2+i):
                 stride = 2 if reduction and j < 2 else 1
@@ -73,7 +76,7 @@ class Cell(nn.Module):
             for x in xs:
                 outputs.append(self._ops[i](x, alphas[i]))
                 i += 1
-            xs.append(sum(outputs)) # debug: dim_assert
-        return torch.cat(xs[-self.n_nodes:], dim=1) # debug: dim_assert
+            xs.append(sum(outputs)) 
+        return fluid.layers.concat(xs[-self.n_nodes:], dim=1) 
             
        

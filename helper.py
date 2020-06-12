@@ -23,7 +23,7 @@ def calc_param_size(model):
     Show the memory cost of model.parameters, in MB. 
     It works for pytorch(torch.float32) and paddlepaddle(VarType.FP32).
     '''
-    return np.sum(np.prod(v.size()) for v in model.parameters())*4e-6
+    return np.sum(np.prod(p.shape) for p in model.parameters())*4e-6
 
 def print_red(something):
     print("\033[1;31m{}\033[0m".format(something))
