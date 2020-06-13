@@ -5,16 +5,14 @@ from .searched import SearchedNet
 # from tqdm import tqdm
 from tqdm.notebook import tqdm
 from collections import defaultdict, OrderedDict
-import pickle
 from genotype import Genotype
 import shutil
 from .search import Base
 import pickle
-from paddle.fluid import core
 import paddle.fluid as fluid
 from paddle.fluid.optimizer import Adam
 from paddle.fluid.layers import accuracy
-from .utils import ReduceLROnPlateau, load_opt
+from .utils import ReduceLROnPlateau
 import numpy as np
 
 DEBUG_FLAG = True
