@@ -16,6 +16,7 @@ from paddle.fluid import core
 import paddle.fluid as fluid
 from paddle.fluid.optimizer import Adam
 from paddle.fluid.layers import accuracy
+from .utils import ReduceLROnPlateau, load_opt
 
 
 DEBUG_FLAG = True
@@ -74,7 +75,6 @@ class Searching(Base):
         self.check_resume(new_lr=new_lr)
     
     def _init_model(self):
-        pdb.set_trace()
         self.model = ShellNet(in_channels=self.config['data']['in_channels'], 
                               init_node_c=self.config['search']['init_node_c'], 
                               out_channels=self.config['data']['out_channels'], 
@@ -84,21 +84,24 @@ class Searching(Base):
         self.loss = lambda props, y_truth: fluid.layers.reduce_mean(fluid.layers.softmax_with_cross_entropy(props, y_truth))
         self.optim_shell = Adam(parameter_list=self.model.alphas()) 
         self.optim_kernel = Adam(parameter_list=self.model.kernel.parameters())
+        self.shell_scheduler = ReduceLROnPlateau(self.optim_shell)
+        self.kernel_scheduler = ReduceLROnPlateau(self.optim_kernel)
 
     def check_resume(self, new_lr=False):
         self.last_save = os.path.join(self.log_path, self.config['search']['last_save'])
         self.last_aux = os.path.join(self.log_path, self.config['search']['last_aux'])
         if os.path.exists(self.last_aux):
-            model_params,_ = fluid.dygraph.load_dygraph(self.last_save)
+            self.model.set_dict(fluid.dygraph.load_dygraph(self.last_save)[0])
             with open(self.last_aux, 'rb') as f:
                 state_dicts = pickle.load(f)
             self.epoch = state_dicts['epoch'] + 1
             self.geno_count = state_dicts['geno_count']
             self.history = state_dicts['history']
-            self.model.set_dict(model_params)
             if not new_lr:
-                self.optim_shell._learning_rate = state_dicts['lr_shell']
-                self.optim_kernel._learning_rate = state_dicts['lr_kernel']
+                self.optim_shell.set_dict(load_opt(self.last_save+'_shell.pdopt'))
+                self.optim_kernel.set_dict(load_opt(self.last_save+'_kernel.pdopt'))
+                self.shell_scheduler.load_state_dict(state_dicts['shell_scheduler'])
+                self.kernel_scheduler.load_state_dict(state_dicts['kernel_scheduler'])
         else:
             self.epoch = 0
             self.geno_count = Counter()
@@ -119,11 +122,6 @@ class Searching(Base):
         best_gene = None
         best_geno_count = self.config['search']['best_geno_count']
         n_epochs = self.config['search']['epochs']
-        lr_count_shell = 0
-        lr_count_kernel = 0
-        lr_record_shell = float('inf')
-        lr_record_shell = float('inf')
-        lr_patience = self.config['search']['lr_patience']
         for epoch in range(n_epochs):
             gene = str(self.model.get_gene())
             self.geno_count[gene] += 1
@@ -133,16 +131,6 @@ class Searching(Base):
                 break
 
             shell_loss, kernel_loss, shell_acc, kernel_acc = self.train()
-            
-            if shell_loss >= lr_record_shell:
-                lr_count_shell += 1
-                if lr_count_shell == lr_patience:
-                    self.optim_shell._learning_rate *= 0.5
-                    lr_count_shell = 0
-                    lr_record_shell = shell_loss
-            else:
-                lr_count_shell = 0
-                lr_record_shell = shell_loss
                 
             self.shell_scheduler.step(shell_loss)
             self.kernel_scheduler.step(kernel_loss)
@@ -153,23 +141,24 @@ class Searching(Base):
             
             
             # Save what the current epoch ends up with.
+            fluid.save_dygraph(self.model.state_dict(), self.last_save)
+            fluid.save_dygraph(self.optim_shell.state_dict(), self.last_save+'_shell')
+            fluid.save_dygraph(self.optim_kernel.state_dict(), self.last_save+'_kernel')
             state_dicts = {
                 'epoch': self.epoch,
                 'geno_count': self.geno_count,
                 'history': self.history,
-                'model_param': self.model.state_dict(),
-                'optim_shell': self.optim_shell.state_dict(),
-                'optim_kernel': self.optim_kernel.state_dict(),
                 'kernel_scheduler': self.kernel_scheduler.state_dict(),
                 'shell_scheduler': self.kernel_scheduler.state_dict(),
             }
-            torch.save(state_dicts, self.last_save)
+            with open(self.last_aux, 'wb') as f:
+                pickle.dump(state_dicts, f)
             
             self.epoch += 1
             if self.epoch > n_epochs:
                 break
             
-            if DEBUG_FLAG and epoch >= 1:
+            if DEBUG_FLAG and epoch >= 3:
                 break
                 
         if best_gene is None:
@@ -195,35 +184,35 @@ class Searching(Base):
         with tqdm(train_epoch, total = n_steps,
                   desc = 'Searching | Epoch {}'.format(self.epoch)) as pbar:
             for step, (x, y_truth) in enumerate(pbar):
-                x = torch.as_tensor(x, device=self.device, dtype=torch.float)
-                y_truth = torch.as_tensor(y_truth, device=self.device, dtype=torch.long)
+                x = fluid.dygraph.to_variable(x.astype('float32'))
+                y_truth = fluid.dygraph.to_variable(y_truth.astype('int64')[:,np.newaxis])
                 try:
                     val_x, val_y_truth = next(val_epoch)
                 except StopIteration:
                     val_epoch = self.val_generator.epoch()
                     val_x, val_y_truth = next(val_epoch)
-                val_x = torch.as_tensor(val_x, device=self.device, dtype=torch.float)
-                val_y_truth = torch.as_tensor(val_y_truth, device=self.device, dtype=torch.long)
+                val_x = fluid.dygraph.to_variable(val_x.astype('float32'))
+                val_y_truth = fluid.dygraph.to_variable(val_y_truth.astype('int64')[:,np.newaxis])
                 
                 # optim_shell
-                self.optim_shell.zero_grad()
                 val_y_pred = self.model(val_x)
                 val_loss = self.loss(val_y_pred, val_y_truth)
-                sum_val_loss += val_loss.item()
-                val_acc = accuracy(val_y_pred, val_y_truth)[0]
-                sum_val_acc += val_acc
+                sum_val_loss += val_loss.numpy()[0]
+                val_acc = fluid.layers.accuracy(val_y_pred, val_y_truth, k=1)
+                sum_val_acc += val_acc.numpy()[0]
                 val_loss.backward()
-                self.optim_shell.step()
+                self.optim_shell.minimize(val_loss)
+                self.optim_shell.clear_gradients()
                 
                 # optim_kernel
-                self.optim_kernel.zero_grad()
                 y_pred = self.model(x)
                 loss = self.loss(y_pred, y_truth)
-                sum_loss += loss.item()
-                acc = accuracy(y_pred, y_truth)[0]
-                sum_acc += acc
+                sum_loss += loss.numpy()[0]
+                acc = fluid.layers.accuracy(y_pred, y_truth, k=1)
+                sum_acc += acc.numpy()[0]
                 loss.backward()
-                self.optim_kernel.step()
+                self.optim_kernel.minimize(loss)
+                self.optim_kernel.clear_gradients()
                 
                 # postfix for progress bar
                 postfix = OrderedDict()
@@ -242,5 +231,5 @@ class Searching(Base):
     
 if __name__ == '__main__':
     with fluid.dygraph.guard():
-        searching = Searching()
-        gene = searching.search()
+        s = Searching()
+        gene = s.search()

@@ -1,11 +1,14 @@
-import torch
-import torch.nn as nn
+import paddle.fluid as fluid
+from paddle.fluid.param_attr import ParamAttr
+from paddle.fluid.initializer import MSRAInitializer
+from paddle.fluid.dygraph.nn import Conv2D, Pool2D, BatchNorm, Linear, Dropout
+from paddle.fluid.dygraph import Layer, LayerList, Sequential
 from .ops import OPS, FactorizedReduce, ReLUConvBN
 import pdb
 
 FLAG_DEBUG = False
 
-class SearchedCell(nn.Module):
+class SearchedCell(Layer):
     def __init__(self, gene, n_nodes, c0, c1, node_c, reduction, reduction_prev, drop_rate=0):
         '''
         gene: Genotype, searched architecture of a cell
@@ -28,9 +31,9 @@ class SearchedCell(nn.Module):
             self.preprocess0 = ReLUConvBN(c0, node_c, 1, 1, 0)
         self.preprocess1 = ReLUConvBN(c1, node_c, 1, 1, 0)
         
-        self._ops = nn.ModuleList([OPS[i[0]](C=node_c, 
-                                             stride=2 if reduction and i[1] < 2 else 1, 
-                                             affine=True) for i in self.genolist])
+        self._ops = LayerList([OPS[i[0]](C=node_c, 
+                                         stride=2 if reduction and i[1] < 2 else 1, 
+                                         affine=True) for i in self.genolist])
         
         return
 
@@ -50,14 +53,14 @@ class SearchedCell(nn.Module):
             outputs = []
             for _ in range(2):
                 temp = self._ops[i](xs[self.genolist[i][1]])
-                temp = nn.Dropout2d(self.drop_rate)(temp)
+                temp = Dropout(p=self.drop_rate)(temp)
                 outputs.append(temp)
                 i += 1
             xs.append(sum(outputs)) 
-        return torch.cat(xs[-self.n_nodes:], dim=1) 
+        return fluid.layers.concat(xs[-self.n_nodes:], axis=1) 
             
 
-class SearchedNet(nn.Module):
+class SearchedNet(Layer):
     def __init__(self, gene, in_channels, init_node_c, out_channels, depth, n_nodes, drop_rate=0):
         '''
         gene: Genotype, searched architecture of a cell
@@ -70,13 +73,15 @@ class SearchedNet(nn.Module):
         '''
         super().__init__()
         stem_c = min(in_channels, n_nodes) * init_node_c # stem out_channels
-        self.stem = nn.Sequential(
-          nn.Conv2d(in_channels, stem_c, 3, padding=1, bias=False),
-          nn.BatchNorm2d(stem_c)
+        self.stem = Sequential(
+          Conv2D(in_channels, stem_c, 3, padding=1, 
+                 param_attr=ParamAttr(initializer=MSRAInitializer()), 
+                 bias_attr=False),
+          BatchNorm(stem_c)
         )
         c0 = c1 = stem_c
         node_c = init_node_c # node out_channels
-        self.cells = nn.ModuleList()
+        self.cells = LayerList()
         reduction_prev = False
         reduce_layers = [depth//3, 2*depth//3]
         for i in range(depth):
@@ -90,14 +95,19 @@ class SearchedNet(nn.Module):
             self.cells.append(cell)
             c0, c1 = c1, cell.out_channels
 
-        self.global_pooling = nn.AdaptiveAvgPool2d(1)
-        self.classifier = nn.Linear(c1, out_channels)
+        self.global_pooling = Pool2D(pool_type='avg', global_pooling=True)
+        self.classifier = Linear(input_dim=c1,
+                                 output_dim=out_channels,
+                                 param_attr=ParamAttr(initializer=MSRAInitializer()),
+                                 bias_attr=ParamAttr(initializer=MSRAInitializer()))
+
 
     def forward(self, x):
         x0 = x1 = self.stem(x)
         for i, cell in enumerate(self.cells):
             x0, x1 = x1, cell(x0, x1)
         out = self.global_pooling(x1)
-        y = self.classifier(out.view(out.size(0),-1))
+        out = fluid.layers.squeeze(out, axes=[-1,-2])
+        y = self.classifier(out)
         return y
          

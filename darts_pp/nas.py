@@ -21,7 +21,7 @@ class KernelNet(Layer):
         stem_c = min(in_channels, n_nodes) * init_node_c # stem out_channels
         self.stem = Sequential(
           Conv2D(in_channels, stem_c, 3, padding=1, 
-                 param_attr=fluid.ParamAttr(initializer=MSRAInitializer()), 
+                 param_attr=ParamAttr(initializer=MSRAInitializer()), 
                  bias_attr=False),
           BatchNorm(stem_c)
         )
@@ -48,6 +48,7 @@ class KernelNet(Layer):
                                  bias_attr=ParamAttr(initializer=MSRAInitializer()))
 
     def forward(self, x, alphas_normal, alphas_reduce):
+#         pdb.set_trace()
         x0 = x1 = self.stem(x)
         for i, cell in enumerate(self.cells):
             if cell.reduction:

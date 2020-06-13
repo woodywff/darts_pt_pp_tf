@@ -54,12 +54,12 @@ class ReLUConvBN(fluid.dygraph.Layer):
     def __init__(self, c_in, c_out, kernel_size, stride, padding, affine=True):
         super().__init__()
         self.conv = Conv2D(num_channels=c_in,
-                            num_filters=c_out,
-                            filter_size=kernel_size,
-                            stride=stride,
-                            padding=padding,
-                            param_attr=ParamAttr(initializer=MSRAInitializer()),
-                            bias_attr=False)
+                           num_filters=c_out,
+                           filter_size=kernel_size,
+                           stride=stride,
+                           padding=padding,
+                           param_attr=ParamAttr(initializer=MSRAInitializer()),
+                           bias_attr=False)
         gama, beta = bn_param_config(affine)
         self.bn = BatchNorm(num_channels=c_out, param_attr=gama, bias_attr=beta)
 

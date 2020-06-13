@@ -1,12 +1,7 @@
 import pdb
 import os
-import torch
-import torch.nn as nn
 from helper import calc_param_size
-from .utils import accuracy
 from .searched import SearchedNet
-from torch.optim import Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 # from tqdm import tqdm
 from tqdm.notebook import tqdm
 from collections import defaultdict, OrderedDict
@@ -14,6 +9,13 @@ import pickle
 from genotype import Genotype
 import shutil
 from .search import Base
+import pickle
+from paddle.fluid import core
+import paddle.fluid as fluid
+from paddle.fluid.optimizer import Adam
+from paddle.fluid.layers import accuracy
+from .utils import ReduceLROnPlateau, load_opt
+import numpy as np
 
 DEBUG_FLAG = True
 
@@ -41,24 +43,26 @@ class Training(Base):
                                  out_channels=self.config['data']['out_channels'], 
                                  depth=self.config['search']['depth'], 
                                  n_nodes=self.config['search']['n_nodes'], 
-                                 drop_rate=self.config['train']['drop_rate']).to(self.device)
+                                 drop_rate=self.config['train']['drop_rate'])
         print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
-        self.loss = nn.CrossEntropyLoss().to(self.device)
+        self.loss = lambda props, y_truth: fluid.layers.reduce_mean(fluid.layers.softmax_with_cross_entropy(props, y_truth))
 
-        self.optim = Adam(self.model.parameters())
-        self.scheduler = ReduceLROnPlateau(self.optim,verbose=True,factor=0.5)
-        
+        self.optim = Adam(parameter_list=self.model.parameters())
+        self.scheduler = ReduceLROnPlateau(self.optim)
 
     def check_resume(self, new_lr=False):
         self.last_save = os.path.join(self.log_path, self.config['train']['last_save'])
+        self.last_aux = os.path.join(self.log_path, self.config['train']['last_aux'])
         self.best_shot = os.path.join(self.log_path, self.config['train']['best_shot'])
-        if os.path.exists(self.last_save):
-            state_dicts = torch.load(self.last_save, map_location=self.device)
+        self.best_aux = os.path.join(self.log_path, self.config['train']['best_aux'])
+        if os.path.exists(self.last_aux):
+            self.model.set_dict(fluid.dygraph.load_dygraph(self.last_save)[0])
+            with open(self.last_aux, 'rb') as f:
+                state_dicts = pickle.load(f)
             self.epoch = state_dicts['epoch'] + 1
             self.history = state_dicts['history']
-            self.model.load_state_dict(state_dicts['model_param'])
             if not new_lr:
-                self.optim.load_state_dict(state_dicts['optim'])
+                self.optim.set_dict(fluid.dygraph.load_dygraph(self.last_save)[1])
                 self.scheduler.load_state_dict(state_dicts['scheduler'])
             self.best_val_loss = state_dicts['best_loss']
         else:
@@ -67,7 +71,7 @@ class Training(Base):
             self.best_val_loss = float('inf')
 
     def main_run(self):
-        pdb.set_trace()
+#         pdb.set_trace()
         n_epochs = self.config['train']['epochs']
         
         for epoch in range(n_epochs):
@@ -86,18 +90,21 @@ class Training(Base):
                 self.best_val_loss = val_loss
             
             # Save what the current epoch ends up with.
+            fluid.save_dygraph(self.model.state_dict(), self.last_save)
+            fluid.save_dygraph(self.optim.state_dict(), self.last_save)
             state_dicts = {
                 'epoch': self.epoch,
                 'history': self.history,
-                'model_param': self.model.state_dict(),
-                'optim': self.optim.state_dict(),
                 'scheduler': self.scheduler.state_dict(),
                 'best_loss': self.best_val_loss
             }
-            torch.save(state_dicts, self.last_save)
+            with open(self.last_aux, 'wb') as f:
+                pickle.dump(state_dicts, f)
             
             if is_best:
-                shutil.copy(self.last_save, self.best_shot)
+                shutil.copy(self.last_save+'.pdparams', self.best_shot+'.pdparams')
+                shutil.copy(self.last_save+'.pdopt', self.best_shot+'.pdopt')
+                shutil.copy(self.last_aux, self.best_aux)
             
             self.epoch += 1
             if self.epoch > n_epochs:
@@ -121,18 +128,19 @@ class Training(Base):
         with tqdm(self.train_generator.epoch(), total = n_steps,
                   desc = 'Training | Epoch {} | Training'.format(self.epoch)) as pbar:
             for step, (x, y_truth) in enumerate(pbar):
-                x = torch.as_tensor(x, device=self.device, dtype=torch.float)
-                y_truth = torch.as_tensor(y_truth, device=self.device, dtype=torch.long)
+                x = fluid.dygraph.to_variable(x.astype('float32'))
+                y_truth = fluid.dygraph.to_variable(y_truth.astype('int64')[:,np.newaxis])
 
-                self.optim.zero_grad()
                 y_pred = self.model(x)
                 loss = self.loss(y_pred, y_truth)
-                sum_loss += loss.item()
-                acc1, acc5 = accuracy(y_pred, y_truth, topk=(1,5))
-                sum_acc1 += acc1
-                sum_acc5 += acc5
+                sum_loss += loss.numpy()[0]
+                acc1 = fluid.layers.accuracy(y_pred, y_truth, k=1)
+                acc5 = fluid.layers.accuracy(y_pred, y_truth, k=5)
+                sum_acc1 += acc1.numpy()[0]
+                sum_acc5 += acc5.numpy()[0]
                 loss.backward()
-                self.optim.step()
+                self.optim.minimize(loss)
+                self.optim.clear_gradients()
                 
                 postfix = OrderedDict()
                 postfix['Loss'] = round(sum_loss/(step+1), 3)
@@ -158,14 +166,15 @@ class Training(Base):
         with tqdm(self.val_generator.epoch(), total = n_steps,
                   desc = 'Training | Epoch {} | Val'.format(self.epoch)) as pbar:
             for step, (x, y_truth) in enumerate(pbar):
-                x = torch.as_tensor(x, device=self.device, dtype=torch.float)
-                y_truth = torch.as_tensor(y_truth, device=self.device, dtype=torch.long)
+                x = fluid.dygraph.to_variable(x.astype('float32'))
+                y_truth = fluid.dygraph.to_variable(y_truth.astype('int64')[:,np.newaxis])
                 y_pred = self.model(x)
                 loss = self.loss(y_pred, y_truth)
-                sum_loss += loss.item()
-                acc1, acc5 = accuracy(y_pred, y_truth, topk=(1,5))
-                sum_acc1 += acc1
-                sum_acc5 += acc5
+                sum_loss += loss.numpy()[0]
+                acc1 = fluid.layers.accuracy(y_pred, y_truth, k=1)
+                acc5 = fluid.layers.accuracy(y_pred, y_truth, k=5)
+                sum_acc1 += acc1.numpy()[0]
+                sum_acc5 += acc5.numpy()[0]
                 
                 postfix = OrderedDict()
                 postfix['Loss'] = round(sum_loss/(step+1), 3)
@@ -179,5 +188,6 @@ class Training(Base):
 
     
 if __name__ == '__main__':
-    training = Training()
-    training.main_run()
+    with fluid.dygraph.guard():
+        t = Training()
+        t.main_run()

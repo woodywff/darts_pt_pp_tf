@@ -18,21 +18,19 @@ search:
   epochs: 200
   geno_file: best_genotype.pkl
   init_node_c: 16
-  last_save: search_last.pt
+  last_save: search_last
   last_aux: search_last_aux.pkl # for paddlepaddle
   n_fold: 2
   n_nodes: 4
-  lr_patience: 10
 train:
   batchsize: 50
-  best_shot: train_best.pt
+  best_shot: train_best
   best_aux: train_best_aux.pkl # for paddlepaddle
   cv_file: data/fmnist/cv_train.pkl
-  last_save: train_last.pt
+  last_save: train_last
   last_aux: train_last_aux.pkl # for paddlepaddle
   n_fold: 5
   drop_rate: 0.2
   epochs: 200
-  lr_patience: 10
 test:
   batchsize: 200

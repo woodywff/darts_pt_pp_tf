@@ -26,7 +26,7 @@ class MixedOp(Layer):
         '''
         alphas: one row of alpha_reduce or alpha_normal
         '''
-        return sum(alpha * op(x) for alpha, op in zip(alphas, self._ops))
+        return sum(alphas[i] * op(x) for i, op in enumerate(self._ops))
 
 
 class Cell(Layer):
@@ -67,6 +67,7 @@ class Cell(Layer):
         x0, x1: Inputs to a cell
         alphas: alpha_reduce or alpha_normal
         '''
+#         pdb.set_trace()
         x0 = self.preprocess0(x0)
         x1 = self.preprocess1(x1)
         xs = [x0, x1]
@@ -77,6 +78,6 @@ class Cell(Layer):
                 outputs.append(self._ops[i](x, alphas[i]))
                 i += 1
             xs.append(sum(outputs)) 
-        return fluid.layers.concat(xs[-self.n_nodes:], dim=1) 
+        return fluid.layers.concat(xs[-self.n_nodes:], axis=1) 
             
        
