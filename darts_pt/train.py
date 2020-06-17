@@ -42,7 +42,7 @@ class Training(Base):
                                  depth=self.config['search']['depth'], 
                                  n_nodes=self.config['search']['n_nodes'], 
                                  drop_rate=self.config['train']['drop_rate']).to(self.device)
-        print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
+        print('Param size = {:.3f} MB'.format(calc_param_size(self.model.parameters())))
         self.loss = nn.CrossEntropyLoss().to(self.device)
 
         self.optim = Adam(self.model.parameters())

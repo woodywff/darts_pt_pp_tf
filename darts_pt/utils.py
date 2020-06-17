@@ -19,15 +19,15 @@ def accuracy(output, target, topk=(1,)):
         res.append(round((correct_k/batch_size).item(),3))
     return res   
 
-def drop_path(x, drop_rate):
-    '''
-    dropout on the channel dimension.
-    drop_rate: probability of an element to be zero-ed.
-    This is a backup for torch.nn.Dropout2d.
-    '''
-    if drop_rate > 0.:
-        keep_prob = 1.-drop_rate
-        mask = torch.zeros(1,x.size(1)).bernoulli_(keep_prob)
-        x /= keep_prob
-        x *= mask
-    return x
+# def drop_path(x, drop_rate):
+#     '''
+#     dropout on the channel dimension.
+#     drop_rate: probability of an element to be zero-ed.
+#     This is a backup for torch.nn.Dropout2d.
+#     '''
+#     if drop_rate > 0.:
+#         keep_prob = 1.-drop_rate
+#         mask = torch.zeros(1,x.size(1)).bernoulli_(keep_prob)
+#         x /= keep_prob
+#         x *= mask
+#     return x

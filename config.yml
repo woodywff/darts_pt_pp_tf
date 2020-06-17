@@ -10,6 +10,7 @@ data:
   out_channels: 10
   preprocessed: data/fmnist/preprocessed.h5
   seed: 0
+  img_size: 28
 search:
   batchsize: 50
   best_geno_count: 40

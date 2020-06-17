@@ -6,17 +6,15 @@ import time
 import sys
 import numpy as np
 import pipeline
-from helper import calc_param_size, print_red
+from helper import print_red, calc_param_size
 from .nas import ShellNet
 # from tqdm import tqdm
 from tqdm.notebook import tqdm
 from collections import defaultdict, Counter, OrderedDict
 import pickle
-from paddle.fluid import core
-import paddle.fluid as fluid
-from paddle.fluid.optimizer import Adam
-from paddle.fluid.layers import accuracy
-from .utils import ReduceLROnPlateau, load_opt
+from .utils import accuracy
+import tensorflow as tf
+# ReduceLROnPlateau, load_opt
 
 
 DEBUG_FLAG = True
@@ -43,7 +41,7 @@ class Base:
         return
     
     def _init_log(self):
-        self.log_path = self.config['data']['log_path']['pp']
+        self.log_path = self.config['data']['log_path']['tf']
         try:
             os.mkdir(self.log_path)
         except FileExistsError:
@@ -52,8 +50,10 @@ class Base:
     def _init_device(self):
         seed = self.config['data']['seed']
         np.random.seed(seed)
-        if not core.is_compiled_with_cuda():
-            print_red('PaddlePaddle for CPU!')
+        tf.random.set_seed(seed)
+
+        if not tf.test.is_gpu_available():
+            print_red('We are running on CPU!')
         return
     
     def _init_dataset(self):
@@ -72,20 +72,22 @@ class Searching(Base):
     def __init__(self, cf='config.yml', cv_i=0, new_lr=False):
         super().__init__(cf=cf, cv_i=cv_i)
         self._init_model()
-        self.check_resume(new_lr=new_lr)
+#         self.check_resume(new_lr=new_lr)
     
     def _init_model(self):
-        self.model = ShellNet(in_channels=self.config['data']['in_channels'], 
+        self.model = ShellNet(img_size=self.config['data']['img_size'],
+                              in_channels=self.config['data']['in_channels'], 
                               init_node_c=self.config['search']['init_node_c'], 
                               out_channels=self.config['data']['out_channels'], 
                               depth=self.config['search']['depth'], 
                               n_nodes=self.config['search']['n_nodes'])
-        print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
-        self.loss = lambda props, y_truth: fluid.layers.reduce_mean(fluid.layers.softmax_with_cross_entropy(props, y_truth))
-        self.optim_shell = Adam(parameter_list=self.model.alphas()) 
-        self.optim_kernel = Adam(parameter_list=self.model.kernel.parameters())
-        self.shell_scheduler = ReduceLROnPlateau(self.optim_shell)
-        self.kernel_scheduler = ReduceLROnPlateau(self.optim_kernel)
+        self.model(np.random.rand(1,28,28,1).astype('float32'),training=True)
+        print('Param size = {:.3f} MB'.format(calc_param_size(self.model.trainable_variables)))
+        self.loss = lambda props, y_truth: tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(y_truth, props))
+#         self.optim_shell = Adam(parameter_list=self.model.alphas()) 
+#         self.optim_kernel = Adam(parameter_list=self.model.kernel.parameters())
+#         self.shell_scheduler = ReduceLROnPlateau(self.optim_shell)
+#         self.kernel_scheduler = ReduceLROnPlateau(self.optim_kernel)
 
     def check_resume(self, new_lr=False):
         self.last_save = os.path.join(self.log_path, self.config['search']['last_save'])

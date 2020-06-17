@@ -39,7 +39,7 @@ class Prediction(Base):
                                  depth=self.config['search']['depth'], 
                                  n_nodes=self.config['search']['n_nodes'], 
                                  drop_rate=self.config['train']['drop_rate'])
-        print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
+        print('Param size = {:.3f} MB'.format(calc_param_size(self.model.parameters())))
         self.loss = lambda props, y_truth: fluid.layers.reduce_mean(fluid.layers.softmax_with_cross_entropy(props, y_truth))
 
         save_path = os.path.join(self.log_path, self.config['train']['best_shot'])

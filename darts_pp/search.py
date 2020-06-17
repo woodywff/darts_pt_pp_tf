@@ -80,7 +80,7 @@ class Searching(Base):
                               out_channels=self.config['data']['out_channels'], 
                               depth=self.config['search']['depth'], 
                               n_nodes=self.config['search']['n_nodes'])
-        print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
+        print('Param size = {:.3f} MB'.format(calc_param_size(self.model.parameters())))
         self.loss = lambda props, y_truth: fluid.layers.reduce_mean(fluid.layers.softmax_with_cross_entropy(props, y_truth))
         self.optim_shell = Adam(parameter_list=self.model.alphas()) 
         self.optim_kernel = Adam(parameter_list=self.model.kernel.parameters())

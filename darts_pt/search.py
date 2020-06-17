@@ -87,7 +87,7 @@ class Searching(Base):
                               out_channels=self.config['data']['out_channels'], 
                               depth=self.config['search']['depth'], 
                               n_nodes=self.config['search']['n_nodes']).to(self.device)
-        print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
+        print('Param size = {:.3f} MB'.format(calc_param_size(self.model.parameters())))
         self.loss = nn.CrossEntropyLoss().to(self.device)
 
         self.optim_shell = Adam(self.model.alphas()) 

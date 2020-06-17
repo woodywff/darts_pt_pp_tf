@@ -3,6 +3,7 @@ from genotype import PRIMITIVES
 import pdb
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
+from tensorflow.keras import Sequential
 
 
 class MixedOp(Layer):

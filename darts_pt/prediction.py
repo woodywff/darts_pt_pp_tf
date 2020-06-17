@@ -40,7 +40,7 @@ class Prediction(Base):
                                  depth=self.config['search']['depth'], 
                                  n_nodes=self.config['search']['n_nodes'], 
                                  drop_rate=self.config['train']['drop_rate']).to(self.device)
-        print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
+        print('Param size = {:.3f} MB'.format(calc_param_size(self.model.parameters())))
         self.loss = nn.CrossEntropyLoss().to(self.device)
 
         state_dicts = torch.load(os.path.join(self.log_path, self.config['train']['best_shot']), 
