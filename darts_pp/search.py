@@ -6,7 +6,7 @@ import time
 import sys
 import numpy as np
 import pipeline
-from helper import calc_param_size, print_red
+from helper import calc_param_size, print_red, ReduceLROnPlateau
 from .nas import ShellNet
 # from tqdm import tqdm
 from tqdm.notebook import tqdm
@@ -16,7 +16,7 @@ from paddle.fluid import core
 import paddle.fluid as fluid
 from paddle.fluid.optimizer import Adam
 from paddle.fluid.layers import accuracy
-from .utils import ReduceLROnPlateau, load_opt
+from .utils import load_opt
 
 
 DEBUG_FLAG = True

@@ -30,3 +30,77 @@ def print_red(something):
     print("\033[1;31m{}\033[0m".format(something))
     return
 
+class ReduceLROnPlateau():
+    '''
+    opt: optimizer
+    factor (float): Factor by which the learning rate will be
+        reduced. new_lr = lr * factor.
+    patience (int): Number of epochs with no improvement after
+        which learning rate will be reduced. For example, if
+        patience = 2, then we will ignore the first 2 epochs
+        with no improvement, and will only decrease the LR after the
+        3rd epoch if the loss still hasn't improved then.
+    verbose (bool): If True, prints a message to stdout for
+        each update.
+    framework: 'pp' for paddlepaddle, 'tf' for tensorflow.
+    '''
+    def __init__(self, opt, patience=10, factor=0.5, verbose=True, framework='pp'):
+        self.opt = opt
+        self.patience = patience
+        self.factor = factor
+        self.verbose = verbose
+        self.record = float('inf')
+        self.count = 0
+        self.framework = framework
+        
+    def step(self, loss):
+        if loss >= self.record:
+            self.count += 1
+            if self.count == self.patience:
+                if self.framework == 'pp':
+                    self.opt._learning_rate *= self.factor
+                elif self.framework == 'tf':
+                    self.opt._set_hyper('learning_rate', self.factor * self.opt.get_config()['learning_rate'])
+                else:
+                    raise NotImplementedError
+                self.count = 0
+                self.record = loss
+        else:
+            self.count = 0
+            self.record = loss
+        return
+    
+    def state_dict(self):
+        if self.framework == 'pp':
+            lr = self.opt._learning_rate
+        elif self.framework == 'tf':
+            lr = self.opt.get_config()['learning_rate']
+        else:
+            raise NotImplementedError
+        return {'record':self.record,
+                'count': self.count,
+                'lr': lr,
+                'patience': self.patience,
+                'factor': self.factor}
+    
+    def load_state_dict(self, state_dict, full_load=False):
+        '''
+        state_dict (dict): State_dict to be recovered.
+        full_load (bool): If True, recovers the self.patience and self.factor.
+        '''
+        self.record = state_dict['record']
+        self.count = state_dict['count']
+        if self.framework == 'pp':
+            self.opt._learning_rate = state_dict['lr']
+        elif self.framework == 'tf':
+            self.opt._set_hyper('learning_rate', state_dict['lr'])
+        else:
+            raise NotImplementedError
+        if full_load:
+            self.patience = state_dict['patience']
+            self.factor = state_dict['factor']
+        return
+    
+    
+
+    

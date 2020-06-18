@@ -14,7 +14,8 @@ from collections import defaultdict, Counter, OrderedDict
 import pickle
 from .utils import accuracy
 import tensorflow as tf
-# ReduceLROnPlateau, load_opt
+from tensorflow.keras.optimizers import Adam
+from helper import ReduceLROnPlateau
 
 
 DEBUG_FLAG = True
@@ -72,7 +73,7 @@ class Searching(Base):
     def __init__(self, cf='config.yml', cv_i=0, new_lr=False):
         super().__init__(cf=cf, cv_i=cv_i)
         self._init_model()
-#         self.check_resume(new_lr=new_lr)
+        self.check_resume(new_lr=new_lr)
     
     def _init_model(self):
         self.model = ShellNet(img_size=self.config['data']['img_size'],
@@ -84,26 +85,35 @@ class Searching(Base):
         self.model(np.random.rand(1,28,28,1).astype('float32'),training=True)
         print('Param size = {:.3f} MB'.format(calc_param_size(self.model.trainable_variables)))
         self.loss = lambda props, y_truth: tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(y_truth, props))
-#         self.optim_shell = Adam(parameter_list=self.model.alphas()) 
-#         self.optim_kernel = Adam(parameter_list=self.model.kernel.parameters())
-#         self.shell_scheduler = ReduceLROnPlateau(self.optim_shell)
-#         self.kernel_scheduler = ReduceLROnPlateau(self.optim_kernel)
+        self.optim_shell = Adam() 
+        self.optim_kernel = Adam()
+        self.shell_scheduler = ReduceLROnPlateau(self.optim_shell)
+        self.kernel_scheduler = ReduceLROnPlateau(self.optim_kernel)
 
     def check_resume(self, new_lr=False):
-        self.last_save = os.path.join(self.log_path, self.config['search']['last_save'])
+        checkpoint = tf.train.Checkpoint(model=self.model,
+                                         optim_shell=self.optim_shell,
+                                         optim_kernel=self.optim_kernel)
+        self.manager = tf.train.CheckpointManager(checkpoint=checkpoint,
+                                                  directory=self.log_path,
+                                                  checkpoint_name=self.config['search']['last_save'],
+                                                  max_to_keep=1)
         self.last_aux = os.path.join(self.log_path, self.config['search']['last_aux'])
-        if os.path.exists(self.last_aux):
-            self.model.set_dict(fluid.dygraph.load_dygraph(self.last_save)[0])
+        if self.manager.latest_checkpoint:
+            checkpoint.restore(self.manager.latest_checkpoint)
             with open(self.last_aux, 'rb') as f:
                 state_dicts = pickle.load(f)
             self.epoch = state_dicts['epoch'] + 1
             self.geno_count = state_dicts['geno_count']
             self.history = state_dicts['history']
             if not new_lr:
-                self.optim_shell.set_dict(load_opt(self.last_save+'_shell.pdopt'))
-                self.optim_kernel.set_dict(load_opt(self.last_save+'_kernel.pdopt'))
                 self.shell_scheduler.load_state_dict(state_dicts['shell_scheduler'])
                 self.kernel_scheduler.load_state_dict(state_dicts['kernel_scheduler'])
+            else:
+                del(self.optim_shell) # I'm not sure if this is necessary
+                del(self.optim_kernel)
+                self.optim_shell = Adam() 
+                self.optim_kernel = Adam()
         else:
             self.epoch = 0
             self.geno_count = Counter()

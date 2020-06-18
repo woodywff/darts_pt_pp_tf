@@ -12,7 +12,7 @@ import pickle
 import paddle.fluid as fluid
 from paddle.fluid.optimizer import Adam
 from paddle.fluid.layers import accuracy
-from .utils import ReduceLROnPlateau
+from helper import ReduceLROnPlateau
 import numpy as np
 
 DEBUG_FLAG = True
