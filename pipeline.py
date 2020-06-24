@@ -13,8 +13,8 @@ class Generator():
     h5f: .h5 file path
     bs: batch size
     is_test: if True, it is the test dataset, otherwise training dataset.
-    channel_last: if True, corresponds to inputs with shape (batch, height, width, channels) (for tensorflow),
-                  otherwise, (batch, channels, height, width) (for pytorch and paddlepaddle).
+    channel_last: if True, corresponds to inputs with shape [batch, height, width, channels] (for tensorflow),
+                  otherwise, [batch, channels, height, width] (for pytorch and paddlepaddle).
     '''
     def __init__(self, ids, h5f, bs, is_test=False, channel_last=False):
         self.ids = ids
@@ -80,7 +80,6 @@ class Dataset():
         with open(cv_file,'rb') as f:
             self.cv_dict = pickle.load(f)
         self.cv_i = cv_i
-        
     
     @property
     def _train_ids(self):

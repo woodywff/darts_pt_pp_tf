@@ -16,5 +16,5 @@ def accuracy(output, y_truth, topk=(1,)):
     for k in topk:
         correct_k = np.sum(correct[:, :k])
         res.append(correct_k / batch_size)
-    return res
+    return res[0] if len(res)==1 else res
 

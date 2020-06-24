@@ -93,12 +93,10 @@ class ShellNet(Model):
                                           trainable=True)
         self.alphas_reduce  = tf.Variable(np.zeros((n_ops, len(PRIMITIVES)), dtype=np.float32),
                                           trainable=True)
-        # setup alphas list
-        self._alphas = [self.alphas_normal, self.alphas_reduce]
         
+    @property    
     def alphas(self):
-        for param in self._alphas:
-            yield param
+        return [self.alphas_normal, self.alphas_reduce]
 
     def call(self, x):
         return self.kernel(x, self.alphas_normal, self.alphas_reduce) 

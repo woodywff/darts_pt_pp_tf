@@ -26,11 +26,14 @@ class Base:
     cf: config.yml path
     cv_i: Which fold in the cross validation. If cv_i >= n_fold: use all the training dataset.
     for_train: If True, for training process, otherwise for searching.
+    channel_last: if True, corresponds to inputs with shape (batch, height, width, channels),
+                  otherwise, (batch, channels, height, width).
     '''
-    def __init__(self, cf='config.yml', cv_i=0, for_train=False):
+    def __init__(self, cf='config.yml', cv_i=0, for_train=False, channel_last=True):
         self.cf = cf
         self.cv_i = cv_i
         self.for_train = for_train
+        self.channel_last = channel_last
         self._init_config()
         self._init_log()
         self._init_device()
@@ -49,16 +52,27 @@ class Base:
             pass
 
     def _init_device(self):
+        '''
+        So far we only consider single GPU.
+        '''
         seed = self.config['data']['seed']
         np.random.seed(seed)
         tf.random.set_seed(seed)
 
-        if not tf.test.is_gpu_available():
+        try: 
+            gpu_check = tf.config.list_physical_devices('GPU')
+            tf.config.experimental.set_memory_growth(gpu_check[0], True)
+        except AttributeError: 
+            gpu_check = tf.test.is_gpu_available()
+        except IndexError:
+            gpu_check = False
+        if not (gpu_check):
             print_red('We are running on CPU!')
         return
     
     def _init_dataset(self):
-        dataset = pipeline.Dataset(cf=self.cf, cv_i=self.cv_i, for_train=self.for_train)
+        dataset = pipeline.Dataset(cf=self.cf, cv_i=self.cv_i, 
+                                   for_train=self.for_train, channel_last=self.channel_last)
         self.train_generator = dataset.train_generator
         self.val_generator = dataset.val_generator
         return
@@ -87,8 +101,8 @@ class Searching(Base):
         self.loss = lambda props, y_truth: tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(y_truth, props))
         self.optim_shell = Adam() 
         self.optim_kernel = Adam()
-        self.shell_scheduler = ReduceLROnPlateau(self.optim_shell)
-        self.kernel_scheduler = ReduceLROnPlateau(self.optim_kernel)
+        self.shell_scheduler = ReduceLROnPlateau(self.optim_shell, framework='tf')
+        self.kernel_scheduler = ReduceLROnPlateau(self.optim_kernel, framework='tf')
 
     def check_resume(self, new_lr=False):
         checkpoint = tf.train.Checkpoint(model=self.model,
@@ -106,14 +120,14 @@ class Searching(Base):
             self.epoch = state_dicts['epoch'] + 1
             self.geno_count = state_dicts['geno_count']
             self.history = state_dicts['history']
-            if not new_lr:
-                self.shell_scheduler.load_state_dict(state_dicts['shell_scheduler'])
-                self.kernel_scheduler.load_state_dict(state_dicts['kernel_scheduler'])
-            else:
+            if new_lr:
                 del(self.optim_shell) # I'm not sure if this is necessary
                 del(self.optim_kernel)
                 self.optim_shell = Adam() 
                 self.optim_kernel = Adam()
+            else:
+                self.shell_scheduler.load_state_dict(state_dicts['shell_scheduler'])
+                self.kernel_scheduler.load_state_dict(state_dicts['kernel_scheduler'])
         else:
             self.epoch = 0
             self.geno_count = Counter()
@@ -143,7 +157,6 @@ class Searching(Base):
                 break
 
             shell_loss, kernel_loss, shell_acc, kernel_acc = self.train()
-                
             self.shell_scheduler.step(shell_loss)
             self.kernel_scheduler.step(kernel_loss)
             self.history['shell_loss'].append(shell_loss)
@@ -153,9 +166,7 @@ class Searching(Base):
             
             
             # Save what the current epoch ends up with.
-            fluid.save_dygraph(self.model.state_dict(), self.last_save)
-            fluid.save_dygraph(self.optim_shell.state_dict(), self.last_save+'_shell')
-            fluid.save_dygraph(self.optim_kernel.state_dict(), self.last_save+'_kernel')
+            self.manager.save()
             state_dicts = {
                 'epoch': self.epoch,
                 'geno_count': self.geno_count,
@@ -178,14 +189,31 @@ class Searching(Base):
         with open(geno_file, 'wb') as f:
             pickle.dump(best_gene, f)
         return best_gene
-        
     
+    @tf.function
+    def shell_step(self, x, y_truth):
+        with tf.GradientTape() as tape:
+            props = self.model(x, training=True)
+            loss = self.loss(props, y_truth)
+        grads = tape.gradient(loss, self.model.alphas)
+        self.optim_kernel.apply_gradients(zip(grads, self.model.alphas))
+        return props, loss
+    
+    @tf.function
+    def kernel_step(self, x, y_truth):
+        with tf.GradientTape() as tape:
+            props = self.model(x, training=True)
+            loss = self.loss(props, y_truth)
+            loss += tf.add_n(self.model.losses) # l2 regularization
+        grads = tape.gradient(loss, self.model.kernel.trainable_variables)
+        self.optim_kernel.apply_gradients(zip(grads, self.model.kernel.trainable_variables))
+        return props, loss
+            
     def train(self):
         '''
         Searching | Training process
         To do optim_shell.step() and optim_kernel.step() alternately.
         '''
-        self.model.train()
         train_epoch = self.train_generator.epoch()
         val_epoch = self.val_generator.epoch()
         n_steps = self.train_generator.steps_per_epoch
@@ -196,35 +224,36 @@ class Searching(Base):
         with tqdm(train_epoch, total = n_steps,
                   desc = 'Searching | Epoch {}'.format(self.epoch)) as pbar:
             for step, (x, y_truth) in enumerate(pbar):
-                x = fluid.dygraph.to_variable(x.astype('float32'))
-                y_truth = fluid.dygraph.to_variable(y_truth.astype('int64')[:,np.newaxis])
+                x = tf.constant(x.astype('float32'))
+                y_truth = tf.constant(y_truth.astype('int32'))
                 try:
                     val_x, val_y_truth = next(val_epoch)
                 except StopIteration:
                     val_epoch = self.val_generator.epoch()
                     val_x, val_y_truth = next(val_epoch)
-                val_x = fluid.dygraph.to_variable(val_x.astype('float32'))
-                val_y_truth = fluid.dygraph.to_variable(val_y_truth.astype('int64')[:,np.newaxis])
+                val_x = tf.constant(val_x.astype('float32'))
+                val_y_truth = tf.constant(val_y_truth.astype('int32'))
                 
                 # optim_shell
-                val_y_pred = self.model(val_x)
-                val_loss = self.loss(val_y_pred, val_y_truth)
-                sum_val_loss += val_loss.numpy()[0]
-                val_acc = fluid.layers.accuracy(val_y_pred, val_y_truth, k=1)
-                sum_val_acc += val_acc.numpy()[0]
-                val_loss.backward()
-                self.optim_shell.minimize(val_loss)
-                self.optim_shell.clear_gradients()
+# #                 pdb.set_trace()
+#                 print(self.model.trainable_variables[0][0,0,0])
+#                 print(self.model.alphas[0][:,0])
+                val_props, val_loss = self.shell_step(val_x, val_y_truth)
+                sum_val_loss += val_loss.numpy()
+                val_acc = accuracy(val_props.numpy(), val_y_truth.numpy())
+                sum_val_acc += val_acc
                 
                 # optim_kernel
-                y_pred = self.model(x)
-                loss = self.loss(y_pred, y_truth)
-                sum_loss += loss.numpy()[0]
-                acc = fluid.layers.accuracy(y_pred, y_truth, k=1)
-                sum_acc += acc.numpy()[0]
-                loss.backward()
-                self.optim_kernel.minimize(loss)
-                self.optim_kernel.clear_gradients()
+# #                 pdb.set_trace()
+#                 print(self.model.trainable_variables[0][0,0,0])
+#                 print(self.model.alphas[0][:,0])
+                y_props, loss = self.kernel_step(x, y_truth)
+                sum_loss += loss.numpy()
+                acc = accuracy(y_props.numpy(), y_truth.numpy())
+                sum_acc += acc
+#                 print(self.model.trainable_variables[0][0,0,0])
+#                 print(self.model.alphas[0][:,0])
+#                 pdb.set_trace()
                 
                 # postfix for progress bar
                 postfix = OrderedDict()
@@ -242,6 +271,5 @@ class Searching(Base):
     
     
 if __name__ == '__main__':
-    with fluid.dygraph.guard():
-        s = Searching()
-        gene = s.search()
+    s = Searching()
+    gene = s.search()

@@ -17,3 +17,9 @@ for i in alphas:
 ```
 it will not stop at the end but give out the out boundary error.
 
+for tf2.2.0:
+we need this:
+`tf.config.experimental.set_memory_growth(gpu_check[0], True)`
+otherwise there would be OOM problem.
+
+
