@@ -36,6 +36,8 @@ class Cell(Layer):
         '''
         super().__init__()
         self.reduction = reduction
+        self.n_nodes = n_nodes
+        self.node_c = node_c
         
         if reduction_prev:
             self.preprocess0 = FactorizedReduce(node_c, affine=False)
@@ -43,8 +45,7 @@ class Cell(Layer):
             self.preprocess0 = ReLUConvBN(node_c, 1, 1, affine=False)
         self.preprocess1 = ReLUConvBN(node_c, 1, 1, affine=False)
         
-        self.n_nodes = n_nodes
-        self.node_c = node_c
+        
         
         self._ops = []
         for i in range(self.n_nodes):
@@ -54,9 +55,9 @@ class Cell(Layer):
                 self._ops.append(op)
         return
 
-    @property
-    def out_channels(self):
-        return self.n_nodes * self.node_c
+#     @property
+#     def out_channels(self):
+#         return self.n_nodes * self.node_c
     
     def call(self, x0, x1, alphas):
         '''

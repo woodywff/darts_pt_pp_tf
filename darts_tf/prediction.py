@@ -9,7 +9,8 @@ import pickle
 from genotype import Genotype
 from .search import Base
 import pipeline
-import paddle.fluid as fluid
+from .utils import accuracy
+import tensorflow as tf
 import numpy as np
 
 DEBUG_FLAG = False
@@ -24,27 +25,28 @@ class Prediction(Base):
         self._init_model()
         
     def _init_dataset(self):
-        dataset = pipeline.Dataset(cf=self.cf, test_only=True)
+        dataset = pipeline.Dataset(cf=self.cf, test_only=True,
+                                   channel_last=True)
         self.test_generator = dataset.test_generator
         return
     
     def _init_model(self):
-        geno_file = os.path.join(self.log_path, self.config['search']['geno_file'])
+        geno_file = os.path.join(self.search_log, self.config['search']['geno_file'])
         with open(geno_file, 'rb') as f:
             gene = eval(pickle.load(f)[0])
         self.model = SearchedNet(gene=gene, 
+                                 img_size=self.config['data']['img_size'],
                                  in_channels=self.config['data']['in_channels'], 
                                  init_node_c=self.config['search']['init_node_c'], 
                                  out_channels=self.config['data']['out_channels'], 
                                  depth=self.config['search']['depth'], 
-                                 n_nodes=self.config['search']['n_nodes'], 
-                                 drop_rate=self.config['train']['drop_rate'])
-        print('Param size = {:.3f} MB'.format(calc_param_size(self.model)))
-        self.loss = lambda props, y_truth: fluid.layers.reduce_mean(fluid.layers.softmax_with_cross_entropy(props, y_truth))
+                                 n_nodes=self.config['search']['n_nodes'])
+#         self.model(np.random.rand(1,28,28,1).astype('float32'),training=True)
+#         print('Param size = {:.3f} MB'.format(calc_param_size(self.model.trainable_variables)))
+        self.loss = lambda props, y_truth: tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(y_truth, props))
 
-        save_path = os.path.join(self.log_path, self.config['train']['best_shot'])
-        self.model.set_dict(fluid.dygraph.load_dygraph(save_path)[0])
-        self.model.eval()
+        save_path = os.path.join(self.train_log, self.config['train']['best_shot'])
+        self.model.load_weights(save_path)
 
     def predict(self):
         n_steps = self.test_generator.steps_per_epoch
@@ -54,15 +56,14 @@ class Prediction(Base):
         with tqdm(self.test_generator.epoch(), total = n_steps,
                   desc = 'Prediction') as pbar:
             for step, (x, y_truth) in enumerate(pbar):
-                x = fluid.dygraph.to_variable(x.astype('float32'))
-                y_truth = fluid.dygraph.to_variable(y_truth.astype('int64')[:,np.newaxis])
-                y_pred = self.model(x)
-                loss = self.loss(y_pred, y_truth)
-                sum_loss += loss.numpy()[0]
-                acc1 = fluid.layers.accuracy(y_pred, y_truth, k=1)
-                acc5 = fluid.layers.accuracy(y_pred, y_truth, k=5)
-                sum_acc1 += acc1.numpy()[0]
-                sum_acc5 += acc5.numpy()[0]
+                x = tf.constant(x.astype('float32'))
+                y_truth = tf.constant(y_truth.astype('int32'))
+                props = self.model(x, training=False)
+                loss = self.loss(props, y_truth)
+                sum_loss += loss.numpy()
+                acc1, acc5 = accuracy(props.numpy(), y_truth.numpy(), topk=(1,5))
+                sum_acc1 += acc1
+                sum_acc5 += acc5
                 
                 postfix = OrderedDict()
                 postfix['Loss'] = round(sum_loss/(step+1), 3)
@@ -76,6 +77,5 @@ class Prediction(Base):
 
     
 if __name__ == '__main__':
-    with fluid.dygraph.guard():
-        p = Prediction()
-        loss, acc1, acc5 = p.predict()
+    p = Prediction()
+    loss, acc1, acc5 = p.predict()

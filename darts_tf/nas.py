@@ -28,7 +28,6 @@ class KernelNet(Model):
                    kernel_regularizer=l2reg(), use_bias=False),
             BatchNorm(affine=True)
         ])
-#         c0 = c1 = stem_c
         node_c = init_node_c # node out_channels
         self.cells = []
         reduction_prev = False
@@ -42,7 +41,6 @@ class KernelNet(Model):
             cell = Cell(n_nodes, node_c, reduction, reduction_prev)
             reduction_prev = reduction
             self.cells.append(cell)
-#             c0, c1 = c1, cell.out_channels
 
         self.global_pooling = GlobalAveragePooling2D()
         self.classifier = Dense(out_channels, 

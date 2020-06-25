@@ -6,7 +6,7 @@ import time
 import sys
 import numpy as np
 import pipeline
-from helper import print_red, calc_param_size
+from helper import print_red, calc_param_size, ReduceLROnPlateau
 from .nas import ShellNet
 # from tqdm import tqdm
 from tqdm.notebook import tqdm
@@ -15,7 +15,6 @@ import pickle
 from .utils import accuracy
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
-from helper import ReduceLROnPlateau
 
 
 DEBUG_FLAG = True
@@ -25,15 +24,12 @@ class Base:
     Base class for Searching and Training
     cf: config.yml path
     cv_i: Which fold in the cross validation. If cv_i >= n_fold: use all the training dataset.
-    for_train: If True, for training process, otherwise for searching.
-    channel_last: if True, corresponds to inputs with shape (batch, height, width, channels),
-                  otherwise, (batch, channels, height, width).
+    for_train: If True, for training process, otherwise for searching. It affects the Dataset.
     '''
-    def __init__(self, cf='config.yml', cv_i=0, for_train=False, channel_last=True):
+    def __init__(self, cf='config.yml', cv_i=0, for_train=False):
         self.cf = cf
         self.cv_i = cv_i
         self.for_train = for_train
-        self.channel_last = channel_last
         self._init_config()
         self._init_log()
         self._init_device()
@@ -45,9 +41,12 @@ class Base:
         return
     
     def _init_log(self):
-        self.log_path = self.config['data']['log_path']['tf']
+        log_path = self.config['data']['log_path']['tf']
+        self.search_log = os.path.join(log_path, 'search')
+        self.train_log = os.path.join(log_path, 'train')
         try:
-            os.mkdir(self.log_path)
+            os.makedirs(self.search_log)
+            os.makedirs(self.train_log)
         except FileExistsError:
             pass
 
@@ -72,7 +71,8 @@ class Base:
     
     def _init_dataset(self):
         dataset = pipeline.Dataset(cf=self.cf, cv_i=self.cv_i, 
-                                   for_train=self.for_train, channel_last=self.channel_last)
+                                   for_train=self.for_train, 
+                                   channel_last=True) 
         self.train_generator = dataset.train_generator
         self.val_generator = dataset.val_generator
         return
@@ -109,10 +109,10 @@ class Searching(Base):
                                          optim_shell=self.optim_shell,
                                          optim_kernel=self.optim_kernel)
         self.manager = tf.train.CheckpointManager(checkpoint=checkpoint,
-                                                  directory=self.log_path,
+                                                  directory=self.search_log,
                                                   checkpoint_name=self.config['search']['last_save'],
                                                   max_to_keep=1)
-        self.last_aux = os.path.join(self.log_path, self.config['search']['last_aux'])
+        self.last_aux = os.path.join(self.search_log, self.config['search']['last_aux'])
         if self.manager.latest_checkpoint:
             checkpoint.restore(self.manager.latest_checkpoint)
             with open(self.last_aux, 'rb') as f:
@@ -139,7 +139,7 @@ class Searching(Base):
         (best_gene: str(Genotype), geno_count: int)
         '''
 #         pdb.set_trace()
-        geno_file = os.path.join(self.log_path, self.config['search']['geno_file'])
+        geno_file = os.path.join(self.search_log, self.config['search']['geno_file'])
         if os.path.exists(geno_file):
             print('{} exists.'.format(geno_file))
             with open(geno_file, 'rb') as f:
@@ -185,7 +185,9 @@ class Searching(Base):
                 break
                 
         if best_gene is None:
-            best_gene = self.geno_count.most_common(1)[0]
+            gene = str(self.model.get_gene())
+            self.geno_count[gene] += 1
+            best_gene = (gene, self.geno_count[gene])
         with open(geno_file, 'wb') as f:
             pickle.dump(best_gene, f)
         return best_gene
@@ -204,7 +206,7 @@ class Searching(Base):
         with tf.GradientTape() as tape:
             props = self.model(x, training=True)
             loss = self.loss(props, y_truth)
-            loss += tf.add_n(self.model.losses) # l2 regularization
+#             loss += tf.add_n(self.model.losses) # l2 regularization
         grads = tape.gradient(loss, self.model.kernel.trainable_variables)
         self.optim_kernel.apply_gradients(zip(grads, self.model.kernel.trainable_variables))
         return props, loss
@@ -235,25 +237,16 @@ class Searching(Base):
                 val_y_truth = tf.constant(val_y_truth.astype('int32'))
                 
                 # optim_shell
-# #                 pdb.set_trace()
-#                 print(self.model.trainable_variables[0][0,0,0])
-#                 print(self.model.alphas[0][:,0])
                 val_props, val_loss = self.shell_step(val_x, val_y_truth)
                 sum_val_loss += val_loss.numpy()
                 val_acc = accuracy(val_props.numpy(), val_y_truth.numpy())
                 sum_val_acc += val_acc
                 
                 # optim_kernel
-# #                 pdb.set_trace()
-#                 print(self.model.trainable_variables[0][0,0,0])
-#                 print(self.model.alphas[0][:,0])
-                y_props, loss = self.kernel_step(x, y_truth)
+                props, loss = self.kernel_step(x, y_truth)
                 sum_loss += loss.numpy()
-                acc = accuracy(y_props.numpy(), y_truth.numpy())
+                acc = accuracy(props.numpy(), y_truth.numpy())
                 sum_acc += acc
-#                 print(self.model.trainable_variables[0][0,0,0])
-#                 print(self.model.alphas[0][:,0])
-#                 pdb.set_trace()
                 
                 # postfix for progress bar
                 postfix = OrderedDict()

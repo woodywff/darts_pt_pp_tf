@@ -17,7 +17,11 @@ OPS = {
 }
 
 def l2reg():
-    return tf.keras.regularizers.l2()
+    '''
+    We didn't add l2 regularization in this version.
+    '''
+#     return tf.keras.regularizers.l2()
+    return None
 
 def BatchNorm(affine=True):
     '''
