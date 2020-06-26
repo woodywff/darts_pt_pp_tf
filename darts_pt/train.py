@@ -67,7 +67,6 @@ class Training(Base):
             self.best_val_loss = float('inf')
 
     def main_run(self):
-        pdb.set_trace()
         n_epochs = self.config['train']['epochs']
         
         for epoch in range(n_epochs):

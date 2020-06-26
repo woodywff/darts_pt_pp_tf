@@ -12,7 +12,7 @@ data:
   seed: 0
   img_size: 28
 search:
-  batchsize: 50
+  batchsize: 40
   best_geno_count: 40
   cv_file: data/fmnist/cv_search.pkl
   depth: 8
@@ -24,7 +24,7 @@ search:
   n_fold: 2
   n_nodes: 4
 train:
-  batchsize: 50
+  batchsize: 40
   best_shot: train_best
   best_aux: train_best_aux.pkl # for paddlepaddle
   cv_file: data/fmnist/cv_train.pkl
