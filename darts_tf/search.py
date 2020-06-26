@@ -17,7 +17,7 @@ import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 
 
-DEBUG_FLAG = True
+DEBUG_FLAG = False
 
 class Base:
     '''

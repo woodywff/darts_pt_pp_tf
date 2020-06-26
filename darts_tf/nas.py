@@ -47,24 +47,17 @@ class KernelNet(Model):
                                 kernel_regularizer=l2reg())
 
     def call(self, x, alphas_normal, alphas_reduce):
-#         pdb.set_trace()
-#         print('x:',x.shape)
         if self.zero_pad is not None:
             x = self.zero_pad(x)
-#             print('x:',x.shape)
         x0 = x1 = self.stem(x)
-#         print('x0:',x0.shape,'x1:',x1.shape)
         for i, cell in enumerate(self.cells):
             if cell.reduction:
                 alphas = tf.nn.softmax(alphas_reduce)
             else:
                 alphas = tf.nn.softmax(alphas_normal)
             x0, x1 = x1, cell(x0, x1, alphas)
-#             print('x0:',x0.shape,'x1:',x1.shape)
         out = self.global_pooling(x1)
-#         print('out:',out.shape)
         y = self.classifier(out)
-#         print('y:',y.shape)
         return y
     
     

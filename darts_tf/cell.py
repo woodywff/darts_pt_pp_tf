@@ -45,8 +45,6 @@ class Cell(Layer):
             self.preprocess0 = ReLUConvBN(node_c, 1, 1, affine=False)
         self.preprocess1 = ReLUConvBN(node_c, 1, 1, affine=False)
         
-        
-        
         self._ops = []
         for i in range(self.n_nodes):
             for j in range(2+i):
@@ -55,16 +53,11 @@ class Cell(Layer):
                 self._ops.append(op)
         return
 
-#     @property
-#     def out_channels(self):
-#         return self.n_nodes * self.node_c
-    
     def call(self, x0, x1, alphas):
         '''
         x0, x1: Inputs to a cell
         alphas: alpha_reduce or alpha_normal
         '''
-#         pdb.set_trace()
         x0 = self.preprocess0(x0)
         x1 = self.preprocess1(x1)
         xs = [x0, x1]

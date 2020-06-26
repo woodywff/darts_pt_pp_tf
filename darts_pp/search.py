@@ -19,7 +19,7 @@ from paddle.fluid.layers import accuracy
 from .utils import load_opt
 
 
-DEBUG_FLAG = True
+DEBUG_FLAG = False
 
 class Base:
     '''

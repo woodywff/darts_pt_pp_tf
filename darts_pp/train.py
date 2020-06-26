@@ -15,7 +15,7 @@ from paddle.fluid.layers import accuracy
 from helper import ReduceLROnPlateau
 import numpy as np
 
-DEBUG_FLAG = True
+DEBUG_FLAG = False
 
     
 class Training(Base):
