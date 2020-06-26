@@ -41,7 +41,7 @@ The parameter update process and the training, validation processes all follow t
 
 - For `ReduceLROnPlateau`:
 `patience=10, factor=0.5`
-For simplicity, we didn't put these arguments in config.yml.
+We didn't put these arguments in config.yml for simplicity.
 
 - Don't iter the variable returned by `fluid.layers.create_parameter`, it will not stop at the end but give out the out boundary error.
 
