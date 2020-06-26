@@ -14,12 +14,12 @@ The way I tune the configurations is to modify the `config.yml`.
 
 ## The main storyline
 - We prepare primary operations (op).
-- With op at hand, we are free to construct Cells. Normal Cell with stride = 1, Reduction Cell with stride = 2.
+- With op at hand, we are free to construct Cells. Normal Cell with `stride=1`, Reduction Cell with `stride=2`.
 - Define the Kernel network which is piles of Cells.
-- Encapsulate the Kernel network with the Shell network who has two more trainable parameters --- alphas.
+- Encapsulate the Kernel network with the Shell network who has two more trainable parameters --- `alphas`.
 - Searching process:
     - Update the trainable parameters of Kernel.
-    - Update alphas in Shell.
+    - Update `alphas` in Shell.
     - Save the best-searched Cells.
 - Training process:
     - Reconstruct the Kernel network with searched Cells.
@@ -41,11 +41,11 @@ The parameter update process and the training, validation processes all follow t
 
 - For `ReduceLROnPlateau`:
 `patience=10, factor=0.5`
-We didn't put these arguments in config.yml for simplicity.
+We didn't put these arguments in `config.yml` for simplicity.
 
 - Don't iter the variable returned by `fluid.layers.create_parameter`, it will not stop at the end but give out the out boundary error.
 
-- For tf2.2.0:
+- For tf 2.2.0:
 we need this:
 `tf.config.experimental.set_memory_growth(gpu_check[0], True)`
 otherwise, there would be the OOM problem on my laptop.
