@@ -1,4 +1,4 @@
-# First Order DARTS in PyTorch1.5.1, PaddlePaddle1.8.2, and Tensorflow2.2.0
+# First Order DARTS in PyTorch-1.5.1, PaddlePaddle-1.8.2, and Tensorflow-2.2.0
 
 ## Introduction
 As a toy project, this repository provides implementations of the first order [Differentiable Architecture Search (DARTS)](https://arxiv.org/abs/1806.09055) on the [fashion-mnist](https://github.com/zalandoresearch/fashion-mnist) dataset in three different frameworks.
@@ -45,7 +45,7 @@ We didn't put these arguments in `config.yml` for simplicity.
 
 - Don't iter the variable returned by `fluid.layers.create_parameter`, it will not stop at the end but give out the out boundary error.
 
-- For tf 2.2.0:
+- For tf-2.2.0:
 we need this:
 `tf.config.experimental.set_memory_growth(gpu_check[0], True)`
 otherwise, there would be the OOM problem on my laptop.
